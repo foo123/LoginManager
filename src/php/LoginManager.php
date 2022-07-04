@@ -51,9 +51,11 @@ class LoginManager
 
     private $opts = null;
     private $user = null;
+    private $check = true;
 
     public function __construct()
     {
+        $this->check = true;
         $this->user = null;
         $this->opts = array();
         $this
@@ -64,8 +66,7 @@ class LoginManager
             ->option('set_token', function($name, $value, $expires) {})
             ->option('unset_token', function($name) {})
             ->option('get_token', function($name) {return null;})
-            ->option('get_user', function($username) {return null;})
-            ->option('login_user', function($username, $password) {return null;})
+            ->option('get_user', function($username, $password = false) {return null;})
         ;
     }
 
@@ -85,50 +86,30 @@ class LoginManager
 
     public function getUser()
     {
+        $this->checkLogin();
         return $this->user instanceof LoginManagerUser ? $this->user->getOriginalUser() : null;
     }
 
-    public function isLoggedIn($recheck = false)
+    public function isLoggedIn()
     {
-        static $checked = null;
-
-        if (!empty($this->user)) return true;
-        if (!$recheck && null !== $checked) return $checked;
-
-        $checked = $this->validateAuthToken(call_user_func($this->option('get_token'), $this->option('auth_token')));
-
-        return $checked;
+        $this->checkLogin();
+        return $this->user instanceof LoginManagerUser;
     }
 
     public function login($username, $password, $remember = false)
     {
-        $user = call_user_func($this->option('login_user'), $username, $password);
+        $user = call_user_func($this->option('get_user'), $username, $password);
         if (empty($user)) return false;
-        if (!($user instanceof LoginManagerUser)) throw new LoginManagerException('User must be an instance of LoginManagerUser');
-        $this->user = $user;
-        $this->setAuthToken($remember);
-        return true;
-    }
+        if (!($user instanceof LoginManagerUser)) throw new LoginManagerException('get_user callback must return an instance of LoginManagerUser');
 
-    public function logout()
-    {
-        $this->unsetAuthToken();
-        return true;
-    }
-
-    private function salt()
-    {
-        return (string)($this->option('secret_salt') ? $this->option('secret_salt') : '');
-    }
-
-    private function hash($data)
-    {
-        return hash_hmac('md5', $data, $this->salt());
-    }
-
-    private function generateAuthToken($user, $expiration)
-    {
-        if (empty($user)) return '';
+        if ($remember)
+        {
+            $expiration = time() + (int)$this->option('remember_duration') * 24 * 60 * 60;
+        }
+        else
+        {
+            $expiration = time() + (int)$this->option('loggedin_duration') * 24 * 60 * 60;
+        }
 
         list($start, $end) = $this->option('password_fragment');
         $passw = substr($user->getPassword(), $start, $end-$start);
@@ -139,62 +120,70 @@ class LoginManager
         $hmac = hash_hmac($algo, $user->getUsername() . '|' . $expiration, $key);
         $token = $user->getUsername() . '|' . $expiration . '|' . $hmac;
 
-        return $token;
-    }
-
-    private function validateAuthToken($token)
-    {
-        $this->user = null;
-        if (empty($token)) return false;
-
-        $token_parts = explode('|', $token);
-        if (count($token_parts) !== 3) return false;
-
-        list($username, $expiration, $hmac) = $token_parts;
-        $expired = $expiration;
-
-        // Quick check to see if an honest cookie has expired
-        if ($expired < time()) return false;
-
-        $user = call_user_func($this->option('get_user'), $username);
-        if (empty($user)) return false;
-        if (!($user instanceof LoginManagerUser)) throw new LoginManagerException('User must be an instance of LoginManagerUser');
-
-        list($start, $end) = $this->option('password_fragment');
-        $passw = substr($user->getPassword(), $start, $end-$start);
-        $key = $this->hash($username . '|' . $passw . '|' . $expiration);
-
-        // If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
-        $algo = function_exists('hash') ? 'sha256' : 'sha1';
-        $hash = hash_hmac($algo, $username . '|' . $expiration, $key);
-        if (!hash_equals($hash, $hmac)) return false;
+        call_user_func($this->option('set_token'), $this->option('auth_token'), $token, $expiration + (1 * 60 * 60));
 
         $this->user = $user;
+        $this->check = true;
+
         return true;
     }
 
-    private function setAuthToken($remember = false)
+    public function logout()
     {
-        if ($remember)
-        {
-            $expiration = time() + (int)$this->option('remember_duration') * 24 * 60 * 60;
-        }
-        else
-        {
-            $expiration = time() + (int)$this->option('loggedin_duration') * 24 * 60 * 60;
-        }
+        call_user_func($this->option('unset_token'), $this->option('auth_token'));
 
-        call_user_func($this->option('set_token'), $this->option('auth_token'), $this->generateAuthToken($this->user, $expiration), $expiration + (1 * 60 * 60));
+        $this->user = null;
+        $this->check = true;
 
+        return true;
+    }
+
+    private function checkLogin()
+    {
+        if ($this->check)
+        {
+            $this->check = false;
+
+            if ($this->user instanceof LoginManagerUser) return $this;
+
+            $this->user = null;
+            $token = call_user_func($this->option('get_token'), $this->option('auth_token'));
+            if (empty($token)) return $this;
+
+            $token_parts = explode('|', $token);
+            if (count($token_parts) !== 3) return $this;
+
+            list($username, $expiration, $hmac) = $token_parts;
+            $expired = $expiration;
+
+            if ($expired < time()) return $this;
+
+            $user = call_user_func($this->option('get_user'), $username, false);
+            if (empty($user)) return $this;
+            if (!($user instanceof LoginManagerUser)) throw new LoginManagerException('get_user callback must return an instance of LoginManagerUser');
+
+            list($start, $end) = $this->option('password_fragment');
+            $passw = substr($user->getPassword(), $start, $end-$start);
+            $key = $this->hash($username . '|' . $passw . '|' . $expiration);
+
+            // If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
+            $algo = function_exists('hash') ? 'sha256' : 'sha1';
+            $hash = hash_hmac($algo, $username . '|' . $expiration, $key);
+            if (!hash_equals($hash, $hmac)) return $this;
+
+            $this->user = $user;
+        }
         return $this;
     }
 
-    private function unsetAuthToken()
+    private function salt()
     {
-        call_user_func($this->option('unset_token'), $this->option('auth_token'));
-        $this->user = null;
+        return (string)($this->option('secret_salt') ? $this->option('secret_salt') : '');
+    }
 
-        return $this;
+    private function hash($data)
+    {
+        return hash_hmac('md5', $data, $this->salt());
     }
 }
 }

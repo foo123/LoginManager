@@ -8,6 +8,7 @@ version 1.0.0
 // setup
 $lm = new LoginManager();
 $lm
+->option('secret_salt', 'SALT')
 ->option('set_token', function($name, $value, $expires) {
     // for example use HTTP cookies to store auth token
     // other option would be storing it in $_SESSION
@@ -41,11 +42,7 @@ $lm
     // other option would be storing it in $_SESSION
     return isset($_COOKIE[$name]) ? $_COOKIE[$name] : null;
 })
-->option('get_user', function($username) use ($mymodel) {
-    $user = $mymodel->findByUserName($username);
-    return empty($user) ? null : new LoginManagerUser($user->username, $user->password, $user);
-})
-->option('login_user', function($username, $password) use ($mymodel) {
+->option('get_user', function($username, $password = false) use ($mymodel) {
     $user = $mymodel->findByUserNameAndPassword($username, $password);
     return empty($user) ? null : new LoginManagerUser($user->username, $user->password, $user /*original user object*/);
 })
