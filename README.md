@@ -2,7 +2,12 @@
 
 Simple, barebones login manager for PHP, JavaScript, Python
 
-version 1.0.0
+version **1.0.0**
+
+![Login Manager](/loginmanager.jpg)
+
+
+**Example:**
 
 ```php
 // setup
