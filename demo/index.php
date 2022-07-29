@@ -14,6 +14,11 @@ class MyModel
     {
         return isset($this->users[$username]) && (false === $password || $password === $this->users[$username]['password']) ? (object)$this->users[$username] : null;
     }
+
+    public function getGuestUser()
+    {
+        return (object)array('username' => 'guest');
+    }
 }
 
 tico('http://localhost:8000', ROOT)
@@ -58,6 +63,10 @@ tico('http://localhost:8000', ROOT)
                 $user = tico()->get('model')->getByUsernameAndPassword($username, $password);
                 return empty($user) ? null : new LoginManagerUser($user->username, $user->password, $user);
             })
+            // optional
+            ->option('get_guest', function() {
+                return new LoginManagerUser('guest', null, tico()->get('model')->getGuestUser());
+            })
         ;
     })
     ->middleware(function($next) {
@@ -71,6 +80,7 @@ tico('http://localhost:8000', ROOT)
         tico()->output(
             array(
                 'title' => 'Index',
+                'isLoggedIn' => tico()->get('manager')->isLoggedIn(),
                 'user' => tico()->get('manager')->getUser()
             ),
             'index.tpl.php'

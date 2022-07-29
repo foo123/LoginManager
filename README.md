@@ -2,7 +2,7 @@
 
 Simple, barebones login manager for PHP, JavaScript, Python
 
-version **1.0.0**
+version **1.1.0**
 
 ![Login Manager](/loginmanager.jpg)
 
@@ -50,6 +50,10 @@ $lm
 ->option('get_user', function($username, $password = false) use ($mymodel) {
     $user = $mymodel->findByUserNameAndPassword($username, $password);
     return empty($user) ? null : new LoginManagerUser($user->username, $user->password, $user /*original user object*/);
+})
+// optional
+->option('get_guest', function() {
+    return new LoginManagerUser('guest', null, (object)array('id'=>0,'username'=>'guest'));
 })
 ;
 // use it

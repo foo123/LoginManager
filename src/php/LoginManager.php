@@ -3,7 +3,7 @@
 *   LoginManager
 *   Simple, barebones login manager for PHP, JavaScript, Python
 *
-*   @version 1.0.0
+*   @version 1.1.0
 *   https://github.com/foo123/LoginManager
 *
 **/
@@ -47,16 +47,18 @@ class LoginManagerUser
 }
 class LoginManager
 {
-    const VERSION = '1.0.0';
+    const VERSION = '1.1.0';
 
     private $opts = null;
     private $user = null;
+    private $guest = null;
     private $check = true;
 
     public function __construct()
     {
         $this->check = true;
         $this->user = null;
+        $this->guest = null;
         $this->opts = array();
         $this
             ->option('remember_duration', 6 * 30)
@@ -67,6 +69,7 @@ class LoginManager
             ->option('unset_token', function($name) {})
             ->option('get_token', function($name) {return null;})
             ->option('get_user', function($username, $password = false) {return null;})
+            ->option('get_guest', function() {return null;})
         ;
     }
 
@@ -87,7 +90,7 @@ class LoginManager
     public function getUser()
     {
         $this->checkLogin();
-        return $this->user instanceof LoginManagerUser ? $this->user->getOriginalUser() : null;
+        return $this->user instanceof LoginManagerUser ? $this->user->getOriginalUser() : ($this->guest instanceof LoginManagerUser ? $this->guest->getOriginalUser() : $this->guest);
     }
 
     public function isLoggedIn()
@@ -123,6 +126,7 @@ class LoginManager
         call_user_func($this->option('set_token'), $this->option('auth_token'), $token, $expiration + (1 * 60 * 60));
 
         $this->user = $user;
+        $this->guest = null;
         $this->check = true;
 
         return true;
@@ -133,9 +137,16 @@ class LoginManager
         call_user_func($this->option('unset_token'), $this->option('auth_token'));
 
         $this->user = null;
+        $this->guest = null;
         $this->check = true;
 
         return true;
+    }
+
+    private function checkGuest()
+    {
+        $this->guest = call_user_func($this->option('get_guest'));
+        return $this;
     }
 
     private function checkLogin()
@@ -147,19 +158,20 @@ class LoginManager
             if ($this->user instanceof LoginManagerUser) return $this;
 
             $this->user = null;
+            $this->guest = null;
             $token = call_user_func($this->option('get_token'), $this->option('auth_token'));
-            if (empty($token)) return $this;
+            if (empty($token)) return $this->checkGuest();
 
             $token_parts = explode('|', $token);
-            if (count($token_parts) !== 3) return $this;
+            if (count($token_parts) !== 3) return $this->checkGuest();
 
             list($username, $expiration, $hmac) = $token_parts;
             $expired = $expiration;
 
-            if ($expired < time()) return $this;
+            if ($expired < time()) return $this->checkGuest();
 
             $user = call_user_func($this->option('get_user'), $username, false);
-            if (empty($user)) return $this;
+            if (empty($user)) return $this->checkGuest();
             if (!($user instanceof LoginManagerUser)) throw new LoginManagerException('get_user callback must return an instance of LoginManagerUser');
 
             list($start, $end) = $this->option('password_fragment');
@@ -169,7 +181,7 @@ class LoginManager
             // If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
             $algo = function_exists('hash') ? 'sha256' : 'sha1';
             $hash = hash_hmac($algo, $username . '|' . $expiration, $key);
-            if (!hash_equals($hash, $hmac)) return $this;
+            if (!hash_equals($hash, $hmac)) return $this->checkGuest();
 
             $this->user = $user;
         }
