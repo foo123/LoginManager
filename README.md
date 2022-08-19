@@ -2,7 +2,7 @@
 
 Simple, barebones login manager for PHP, JavaScript, Python
 
-version **1.1.0**
+version **1.1.1**
 
 ![Login Manager](/loginmanager.jpg)
 
@@ -77,13 +77,16 @@ $lm
 ;
 // use it
 $app->on('/login', function() use ($lm) {
-    $lm->login($_POST['username'], $_POST['password'], !empty($_POST['rememberme']));
+    $success = $lm->login($_POST['username'], $_POST['password'], !empty($_POST['rememberme']));
+    if ($success) $app->redirect('/', 302);
+    else $app->output('login.tpl', ['error' => 'Invalid username or password']);
 });
 $app->on('/logout', function() use ($lm) {
     $lm->logout();
+    $app->redirect('/', 302);
 });
 $app->on('/admin', function() use ($lm) {
     if (!$lm->isLoggedIn()) $app->redirect('/login');
-    else $app->output('admin.tpl', array('user'=>$lm->getUser() /*original user object*/));
+    else $app->output('admin.tpl', ['user'=>$lm->getUser() /*original user object*/]);
 });
 ```

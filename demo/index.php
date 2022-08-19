@@ -101,8 +101,21 @@ tico('http://localhost:8000', ROOT)
         }
         elseif ('POST' === tico()->requestMethod())
         {
-            tico()->get('manager')->login(tico()->request()->request->get('username', ''), tico()->request()->request->get('password', ''));
-            tico()->redirect(tico()->uri('/'), 302);
+            $success = tico()->get('manager')->login(tico()->request()->request->get('username', ''), tico()->request()->request->get('password', ''));
+            if ($success)
+            {
+                tico()->redirect(tico()->uri('/'), 302);
+            }
+            else
+            {
+                tico()->output(
+                    array(
+                        'title' => 'Login',
+                        'error' => 'Wrong username or password'
+                    ),
+                    'login.tpl.php'
+                );
+            }
         }
         else
         {

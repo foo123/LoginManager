@@ -3,7 +3,7 @@
 *   LoginManager
 *   Simple, barebones login manager for PHP, JavaScript, Python
 *
-*   @version 1.1.0
+*   @version 1.1.1
 *   https://github.com/foo123/LoginManager
 *
 **/
@@ -47,7 +47,7 @@ class LoginManagerUser
 }
 class LoginManager
 {
-    const VERSION = '1.1.0';
+    const VERSION = '1.1.1';
 
     private $opts = null;
     private $user = null;
@@ -60,17 +60,16 @@ class LoginManager
         $this->user = null;
         $this->guest = null;
         $this->opts = array();
-        $this
-            ->option('remember_duration', 6 * 30)
-            ->option('loggedin_duration', 1)
-            ->option('password_fragment', array(4, 8))
-            ->option('auth_token', 'authtoken')
-            ->option('set_token', function($name, $value, $expires) {})
-            ->option('unset_token', function($name) {})
-            ->option('get_token', function($name) {return null;})
-            ->option('get_user', function($username, $password = false) {return null;})
-            ->option('get_guest', function() {return null;})
-        ;
+        // some default options
+        $this->option('remember_duration', 6 * 30);
+        $this->option('loggedin_duration', 1);
+        $this->option('password_fragment', array(4, 8));
+        $this->option('auth_token', 'authtoken');
+        $this->option('set_token', function($name, $value, $expires) {});
+        $this->option('unset_token', function($name) {});
+        $this->option('get_token', function($name) {return null;});
+        $this->option('get_user', function($username, $password = false) {return null;});
+        $this->option('get_guest', function() {return null;});
     }
 
     public function option($key, $val = null)
@@ -114,14 +113,7 @@ class LoginManager
             $expiration = time() + (int)$this->option('loggedin_duration') * 24 * 60 * 60;
         }
 
-        list($start, $end) = $this->option('password_fragment');
-        $passw = substr($user->getPassword(), $start, $end-$start);
-        $key = $this->hash($user->getUsername() . '|' . $passw . '|' . $expiration);
-
-        // If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
-        $algo = function_exists('hash') ? 'sha256' : 'sha1';
-        $hmac = hash_hmac($algo, $user->getUsername() . '|' . $expiration, $key);
-        $token = $user->getUsername() . '|' . $expiration . '|' . $hmac;
+        $token = $user->getUsername() . '|' . $expiration . '|' . $this->hmac($user->getUsername(), $user->getPassword(), $expiration);
 
         call_user_func($this->option('set_token'), $this->option('auth_token'), $token, $expiration + (1 * 60 * 60));
 
@@ -174,28 +166,23 @@ class LoginManager
             if (empty($user)) return $this->checkGuest();
             if (!($user instanceof LoginManagerUser)) throw new LoginManagerException('get_user callback must return an instance of LoginManagerUser');
 
-            list($start, $end) = $this->option('password_fragment');
-            $passw = substr($user->getPassword(), $start, $end-$start);
-            $key = $this->hash($username . '|' . $passw . '|' . $expiration);
-
-            // If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
-            $algo = function_exists('hash') ? 'sha256' : 'sha1';
-            $hash = hash_hmac($algo, $username . '|' . $expiration, $key);
-            if (!hash_equals($hash, $hmac)) return $this->checkGuest();
+            $hmac2 = $this->hmac($user->getUsername(), $user->getPassword(), $expiration);
+            if (!hash_equals($hmac2, $hmac)) return $this->checkGuest();
 
             $this->user = $user;
         }
         return $this;
     }
 
-    private function salt()
+    private function hmac($username, $password, $expiration)
     {
-        return (string)($this->option('secret_salt') ? $this->option('secret_salt') : '');
-    }
-
-    private function hash($data)
-    {
-        return hash_hmac('md5', $data, $this->salt());
+        list($start, $end) = $this->option('password_fragment');
+        $passw = substr((string)$password, $start, $end-$start);
+        $salt = (string)($this->option('secret_salt') ? $this->option('secret_salt') : '');
+        $key = hash_hmac('md5', $username . '|' . $passw . '|' . $expiration, $salt);
+        // If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
+        $hmac = hash_hmac(function_exists('hash') ? 'sha256' : 'sha1', $username . '|' . $expiration, $key);
+        return $hmac;
     }
 }
 }
