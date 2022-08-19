@@ -67,7 +67,7 @@ $lm
     return isset($_COOKIE[$name]) ? $_COOKIE[$name] : null;
 })
 ->option('get_user', function($username, $password = false) use ($mymodel) {
-    $user = $mymodel->findByUserNameAndPassword($username, $password);
+    $user = false !== $password ? $mymodel->findByUserNameAndPassword($username, $password) : $mymodel->findByUserName($username);
     return empty($user) ? null : new LoginManagerUser($user->username, $user->password, $user /*original user object*/);
 })
 // optional
