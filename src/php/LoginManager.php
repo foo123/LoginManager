@@ -3,7 +3,7 @@
 *   LoginManager
 *   Simple, barebones login manager for PHP, JavaScript, Python
 *
-*   @version 1.1.1
+*   @version 1.1.2
 *   https://github.com/foo123/LoginManager
 *
 **/
@@ -19,9 +19,9 @@ class LoginManagerException extends Exception
 }
 class LoginManagerUser
 {
-    private $username = '';
-    private $password = '';
-    private $user = null;
+    protected $username = '';
+    protected $password = '';
+    protected $user = null;
 
     public function __construct($username = '', $password = '', $user = null)
     {
@@ -47,12 +47,12 @@ class LoginManagerUser
 }
 class LoginManager
 {
-    const VERSION = '1.1.1';
+    const VERSION = '1.1.2';
 
-    private $opts = null;
-    private $user = null;
-    private $guest = null;
-    private $check = true;
+    protected $opts = null;
+    protected $user = null;
+    protected $guest = null;
+    protected $check = true;
 
     public function __construct()
     {
@@ -135,13 +135,13 @@ class LoginManager
         return true;
     }
 
-    private function checkGuest()
+    protected function checkGuest()
     {
         $this->guest = call_user_func($this->option('get_guest'));
         return $this;
     }
 
-    private function checkLogin()
+    protected function checkLogin()
     {
         if ($this->check)
         {
@@ -174,7 +174,7 @@ class LoginManager
         return $this;
     }
 
-    private function hmac($username, $password, $expiration)
+    protected function hmac($username, $password, $expiration)
     {
         list($start, $end) = $this->option('password_fragment');
         $passw = substr((string)$password, $start, $end-$start);
